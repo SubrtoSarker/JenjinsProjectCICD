@@ -1,0 +1,384 @@
+﻿@page "/Home"
+@attribute [TabItemOption(Text = "Index", Closable = false)]
+@using ProjectManagement.Models.Task
+@using ProjectManagement.Services.Project
+@using ProjectManagement.Services.Session
+@using ProjectManagement.Services.TaskM
+@using NetcodeHub.Packages.Components.Validations.OnInput;
+@inject Blazored.SessionStorage.ISessionStorageService sess
+@inject ITaskServices task
+@inject IJSRuntime JSRuntime
+@inject ToastService Toast
+@inject IProjectService project
+<PageTitle>Index</PageTitle>
+
+
+<div class="row justify-content-center">
+    <div class="col-md-12">
+        @if (ppu.Count==0 || ppu is null)
+        {
+            <div class="card">
+                <div class="card-header text-center bg-secondary text-black">
+                    <h5>No Projects Avlable</h5>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="row">
+                @foreach (var item in ppu)
+                {
+                    <div class="col-md-3 mb-2">
+                        <div class="card-sm">
+                            <div class="card-header text-center bg-secondary text-black">
+                                <h5 class="mt-2 ms-2">
+                                    @item.strProjectName
+                                    <button class="btn btn-primary btn-sm"
+                                        @onclick="() => GetProjectID(item.intProjectID)"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#AddTask">
+                                        <i class="bi bi-plus-circle"></i>
+                                    </button>
+                                    <button class="btn btn-primary btn-sm"
+                                            @onclick="() => InitlizeTime(item.intProjectID)"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#AddRequest">
+                                        <i class="bi bi-envelope-plus"></i>
+                                    </button>
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="fw-bold text-muted">Task Count : @item.TaskCount</p>
+                                <p class="fw-bold text-muted">Total Users : @item.UserCount</p>
+                                <p class="fw-bold text-muted">Assigned : @item.Lenght</p>
+                                <hr>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-12">
+        <br />
+        @if (PR.Any())
+        {
+            <h3 class="text-center">Pending Requests</h3>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Project</th>
+                        <th>Task</th>
+                        <th>Description</th>
+                        <th>Request From</th>
+                        <th>Created Date</th>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>Working Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var request in PR)
+                    {
+                        <tr>
+                            <td>@request.Type</td>
+                            <td>@request.strProjectName</td>
+                            <td>@request.strTaskName</td>
+                            <td>@request.strDescription</td>
+                            <td>@request.strRequestFrom</td>
+                            <td>@request.dteCreated.ToString("yyyy-MM-dd")</td>
+                            <td>@request.strFrom</td>
+                            <td>@request.strTo</td>
+                            <td>@request.tmWorking</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+@if (session.Boss && TR.Any())
+{
+    <div class="row justify-content-center">
+        <div class="col-md-12">
+            <br />
+            <br />
+            @if (TR.Any())
+            {
+                <h3 class="text-center">Pending Team Requests</h3>
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Type</th>
+                            <th>Project</th>
+                            <th>Request From</th>
+                            <th>Created Date</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var request in TR)
+                        {
+                            <tr>
+                                <td>@request.strUserName</td>
+                                <td>@request.Type</td>
+                                <td>@request.strProjectName</td>
+                                <td>@request.strRequestFrom</td>
+                                <td>@request.dteCreated.ToString("yyyy-MM-dd")</td>
+                                <td>@request.strFrom</td>
+                                <td>@request.strTo</td>
+                                <button class="btn btn-primary"
+                                        data-bs-toggle="modal"
+                                        @onclick="() => GetRequestID(request.intID)"
+                                        data-bs-target="#actionModal">
+                                    Action
+                                </button>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+
+<div class="modal fade fade-in-modal" id="AddTask" tabindex="-1" role="dialog" aria-labelledby="actionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-center">Add New Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="@newTask" OnValidSubmit="CreateTask" class="needs-validation" novalidate>
+                    <DataAnnotationsValidator />
+                    <div class="row">
+                        <FloatingText id="Name" type="text" class="form-control" @bind-Value="newTask.strTaskName" Label="Name"/>
+                        <ValidationMessage class="text-danger" For="@(() => newTask.strTaskName)" />
+                    </div>
+                    <div class="row">
+                        <FloatingText id="Desc" type="text" class="form-control" @bind-Value="newTask.strDescription" Label="Description"/>
+                        <ValidationMessage class="text-danger" For="@(() => newTask.strDescription)" />
+                    </div>
+                    <div class="row">
+                        <FloatingText id="Req" type="text" class="form-control" @bind-Value="newTask.strRequestFrom" Label="Request From"/>
+                        <ValidationMessage class="text-danger" For="@(() => newTask.strRequestFrom)" />
+                    </div>
+                    <button type="submit" data-bs-dismiss="modal" class="btn btn-primary">ADD</button>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade fade-in-modal" id="AddRequest" tabindex="-1" role="dialog" aria-labelledby="actionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-center">Add New Request</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="@newTask" OnValidSubmit="Request" class="needs-validation" novalidate>
+                    <DataAnnotationsValidator />
+                    <div class="row mb-3">
+                        <div class="col-md-2">
+                            <label for="Type" class="form-label mt-2">Type</label>
+                        </div>
+                        <div class="col-md-10">
+                            <select class="form-select mt-1" id="Type" @bind="Type">
+                                <option value="7">Meeting</option>
+                                <option value="8">Emergency Support</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <FloatingText id="Name" type="text" class="form-control" @bind-Value="newTask.strTaskName" Label="Name" />
+                        <ValidationMessage class="text-danger" For="@(() => newTask.strTaskName)" />
+                    </div>
+                    <div class="row">
+                        <FloatingText id="Desc" type="text" class="form-control" @bind-Value="newTask.strDescription" Label="Description" />
+                        <ValidationMessage class="text-danger" For="@(() => newTask.strDescription)" />
+                    </div>
+                    <div class="row">
+                        <FloatingText id="Req" type="text" class="form-control" @bind-Value="newTask.strRequestFrom" Label="Request From" />
+                        <ValidationMessage class="text-danger" For="@(() => newTask.strRequestFrom)" />
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="StartTime" class="form-label">Start Time</label>
+                            <input type="time" class="form-control" id="StartTime" @oninput="ValidateStartTime" @bind="StartTime" />
+                        </div>
+                        <div class="col-md-4">
+                            <label for="EndTime" class="form-label">End Time</label>
+                            <input type="time" class="form-control" id="EndTime" @oninput="ValidateEndTime" @bind="EndTime" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Spend Time </label>
+                            <label class="form-label">@TimeStamp</label>
+                        </div>
+                    </div>
+                    <button type="submit" data-bs-dismiss="modal" class="btn btn-primary mt-2">ADD</button>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade fade-in-modal" id="actionModal" tabindex="-1" role="dialog" aria-labelledby="actionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-center" id="actionModalLabel">Actions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="btn-group d-flex" role="group">
+                    <button class="btn btn-success flex-fill" data-bs-dismiss="modal" @onclick="() => RequestAction(1)">
+                        <i class="bi bi-check-circle me-2"></i> Approve
+                    </button>
+                    <button class="btn btn-danger flex-fill" data-bs-dismiss="modal" @onclick="() => RequestAction(2)">
+                        <i class="bi bi-x-circle me-2"></i> Reject
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@code
+{
+    public SessionServices session = new SessionServices();
+    public List<ProjectPerUser> ppu = new List<ProjectPerUser>();
+    private TaskCreate newTask = new TaskCreate();
+    public int ProjectID;
+    private int Type = 7;
+    public List<Request> PR = new List<Request>();
+    public List<Request> TR = new List<Request>();
+    int RequestID;
+    private TimeOnly StartTime { get; set; } = new TimeOnly(DateTime.Now.AddHours(-1).Hour, DateTime.Now.Minute);
+    private TimeOnly EndTime { get; set; } = new TimeOnly(DateTime.Now.Hour, DateTime.Now.Minute);
+
+    private TimeSpan TimeStamp => EndTime - StartTime;
+    public async void ValidateStartTime(ChangeEventArgs e)
+    {
+        var newStartTime = TimeOnly.Parse(e.Value.ToString());
+        if (newStartTime > EndTime)
+        {
+            StartTime = EndTime.AddHours(-1);
+            StateHasChanged();
+            await Toast.Warning("Warning", "Invalid Start Time", true);
+        }
+    }
+    public async void ValidateEndTime(ChangeEventArgs e)
+    {
+        var newEndTime = TimeOnly.Parse(e.Value.ToString());
+        if (StartTime > newEndTime)
+        {
+            EndTime = StartTime.AddHours(1);
+            StateHasChanged();
+            await Toast.Warning("Warning", "Invalid End Time", true);
+        }
+    }
+
+    public async void GetProjectID(int Project)
+    {
+        ProjectID = Project;
+        StateHasChanged();
+    }
+    public async void InitlizeTime(int Project)
+    {
+        ProjectID = Project;
+        StartTime = new TimeOnly(DateTime.Now.AddHours(-1).Hour, DateTime.Now.Minute);
+        EndTime = new TimeOnly(DateTime.Now.Hour, DateTime.Now.Minute);
+        StateHasChanged();
+    }
+    public async void Request()
+    {
+        if (StartTime < EndTime)
+        {
+            string output = await task.Request(newTask.strTaskName, newTask.strDescription, newTask.strRequestFrom, session.UserID, ProjectID, DateTime.Now, Type, TimeStamp, StartTime.ToString(), EndTime.ToString());
+            if (output.Contains("Success"))
+            {
+                await Toast.Success("Success", output, true);
+            }
+            else
+            {
+                await Toast.Error("Error", output, true);
+            }
+            newTask = new TaskCreate();
+            load();
+        }
+        else
+        {
+            await Toast.Error("Error", "Invalid Selected Time", true);
+        }
+    }
+    public async void CreateTask()
+    {
+        string Name = newTask.strTaskName;
+        string Desc = newTask.strDescription;
+        string ReqFrom = newTask.strRequestFrom;
+        string output = await task.CreateTask(Name, Desc, ReqFrom, session.UserID, ProjectID);
+        if (output.Contains("Success"))
+        {
+            await Toast.Success("Success", output, true);
+        }
+        else
+        {
+            await Toast.Error("Error", output, true);
+        }
+        load();
+        newTask = new TaskCreate();
+        StateHasChanged();
+    }
+    public async void RequestAction(int Action)
+    {
+        string output = await project.RequestAction(RequestID, session.UserID, Action);
+        if (output.Contains("Success"))
+        {
+            await Toast.Success("Success", output, true);
+        }
+        else
+        {
+            await Toast.Error("Error", output, true);
+        }
+        RequestID = 0;
+        load();
+        StateHasChanged();
+    }
+    public async void GetRequestID(int ReqID)
+    {
+        RequestID = ReqID;
+        StateHasChanged();
+    }
+
+    public async void load()
+    {
+        ppu = await task.GetProjectByUser(session.UserID,0);
+        PR = await task.GetRequest(session.UserID, false);
+        if (session.Boss)
+        {
+            TR = await task.GetRequest(session.UserID, session.Boss);
+        }
+        StateHasChanged();
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        session = await sess.GetItemAsync<SessionServices>("session");
+        load();
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            load();
+        }
+    }
+}

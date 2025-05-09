@@ -1,0 +1,203 @@
+﻿@page "/"
+@attribute [TabItemOption(Text = "LogIn")]
+@layout LogInLayout
+@using Models.User;
+@using Services;
+@using Services.Encription;
+@using Services.Auth;
+@using Services.Session
+@using Microsoft.JSInterop;
+@using System.Text.Json;
+@using NetcodeHub.Packages.Components.Validations.OnInput;
+@inject IAuthServices AuthServices;
+@inject IEncription enc;
+@inject IJSRuntime JSRuntime
+@inject NavigationManager nav
+@inject Blazored.SessionStorage.ISessionStorageService sess
+
+<PageTitle>LogIn</PageTitle>
+<section class="vh-100">
+    <div class="container-fluid h-custom">
+        <div class="row d-flex justify-content-center align-items-center h-100">
+            <div class="col-md-9 col-lg-6 col-xl-5">
+                <img src="~/image/login.png" class="img-fluid" alt="Sample image" />
+            </div>
+            <div class="col-md-8 col-lg-6 col-xl-4 offset-xl-1 mt-10">
+
+                <EditForm Model="@log" OnValidSubmit="Login" class="needs-validation" novalidate>
+                    <DataAnnotationsValidator />
+                    <div class="mb-3">
+                        <FloatingText id="Email" type="email" class="form-control" @bind-Value="log.Email" Placeholder="1234" Label="Enter Your Email Address" />
+                        <ValidationMessage class="text-danger" For="@(() => log.Email)" />
+                    </div>
+
+                    <div class="mb-3">
+                        <FloatingText id="Password" type="password" class="form-control" @bind-Value="log.Password" Placeholder="Password" Label="Password" />
+                        <ValidationMessage class="text-danger" For="@(() => log.Password)" />
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <!-- Checkbox -->
+                        <div class="form-check mb-0">
+                            <input class="form-check-input me-2" type="checkbox" @bind="rememberMe" id="form2Example3" />
+                            <label class="form-check-label" for="form2Example3">
+                                Remember me
+                            </label>
+                        </div>
+                        <a href="/ResetPassword" class="text-body">Forgot password?</a>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger mt-3" role="alert">
+                            @errorMessage
+                        </div>
+                    }
+                    <button type="submit" class="btn btn-primary btn-lg mt-2" style="padding-left: 2.5rem; padding-right: 2.5rem;">
+                        Login
+                    </button>
+                    <p class="small fw-bold mt-2 pt-1 mb-0 mt-0">
+                        Don't have an account? <a href="/Register" class="link-danger">Register</a>
+                    </p>
+                </EditForm>
+
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private LogInModel log = new LogInModel();
+    private User user = new User();
+    private string? errorMessage;
+    private bool rememberMe, redirect;
+    public SessionServices session = new SessionServices();
+
+    private async Task Login()
+    {
+        if (string.IsNullOrEmpty(log.Email) || string.IsNullOrEmpty(log.Password))
+        {
+            errorMessage = "Email and password are required.";
+            return;
+        }
+
+        user = await AuthServices.LogIn(log.Email, log.Password, 0, "a");
+
+        if (user is null)
+        {
+            errorMessage = "Sorry there was an error !!!";
+        }
+        else if (user.Response == "Password Expaired !!!")
+        {
+            nav.NavigateTo("/ResetPassword");
+        }
+        else if (user.Response == "GO")
+        {
+            try
+            {
+                session.UserID = user.UserID;
+                session.Name = user.UserName;
+                session.Phone = user.Phone;
+                session.Email = user.Email;
+                session.TeamID = user.TeamID;
+                session.TeamName = user.TeamName;
+                session.Boss = user.ISBoss;
+                session.Admin = user.ISAdmin;
+                session.Key = user.Token;
+                await sess.SetItemAsync("session", session);
+                if (rememberMe)
+                {
+                    string encryptedValue = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "kjluhasdfo");
+                    string value = encryptedValue != null ? enc.DecryptString(encryptedValue) : "";
+                    redirect = !string.IsNullOrEmpty(value) &&
+                                    System.Text.RegularExpressions.Regex.IsMatch(
+                                        value,
+                                        @"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+                                    );
+                    string Email = enc.EncryptString(log.Email);
+                    string Password = enc.EncryptString(log.Password);
+                    string Exp = enc.EncryptString(DateTime.UtcNow.AddDays(1).ToString("O"));
+                    await JSRuntime.InvokeVoidAsync("localStorage.setItem", "kjluhasdfo", Email);
+                    await JSRuntime.InvokeVoidAsync("localStorage.setItem", "jgfujkgbis", Password);
+                    await JSRuntime.InvokeVoidAsync("localStorage.setItem", "fvsygr", Exp);
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("localStorage.clear");
+                }
+                if (redirect)
+                {
+                    nav.NavigateTo("/Task");
+                }
+                else
+                {
+                    nav.NavigateTo("/Home");
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = "Sorry there was an error !!!";
+            }
+        }
+        else
+        {
+            errorMessage = user.Response;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        redirect = false;
+        if (firstRender)
+        {
+            try
+            {
+                string exp = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "fvsygr");
+                if (string.IsNullOrEmpty(exp))
+                {
+                    await JSRuntime.InvokeVoidAsync("localStorage.clear");
+                }
+                else
+                {
+                    string expirationString = enc.DecryptString(exp);
+                    DateTime expirationTime = DateTime.Parse(expirationString);
+                    if (expirationTime <= DateTime.UtcNow)
+                    {
+                        await JSRuntime.InvokeVoidAsync("localStorage.clear");
+                    }
+                    else
+                    {
+                        string userEmail = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "kjluhasdfo");
+                        string userPassword = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "jgfujkgbis");
+                        if (!string.IsNullOrEmpty(userEmail) && !string.IsNullOrEmpty(userPassword))
+                        {
+                            log.Email = enc.DecryptString(userEmail);
+                            log.Password = enc.DecryptString(userPassword);
+                            rememberMe = true;
+                            redirect = true;
+                            await Login();
+                            StateHasChanged();
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Handle exception if needed
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        //await session.InitializeAsync();
+        session.UserID = 0;
+        session.Name = string.Empty;
+        session.Phone = string.Empty;
+        session.Email = string.Empty;
+        session.TeamID = 0;
+        session.TeamName = string.Empty;
+        session.Boss = false;
+        session.Admin = false;
+        await sess.SetItemAsync("session", session);
+    }
+}
